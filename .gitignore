@@ -1,0 +1,4 @@
+node_modules/
+bun.lock
+/tmp/browseruse.log
+.DS_Store
