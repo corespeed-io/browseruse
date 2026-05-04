@@ -265,7 +265,7 @@ async function main(): Promise<void> {
       return;
     case '--version':
     case '-v':
-      console.log('browseruse 0.1.0');
+      console.log('browseruse 0.2.0');
       return;
   }
 
