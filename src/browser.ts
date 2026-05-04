@@ -225,7 +225,14 @@ export async function launchBrowser(opts: LaunchOptions = {}): Promise<ManagedBr
   if (!actualPort) {
     // Kill the process if we can't get the port
     try { process.kill(pid, 'SIGTERM'); } catch { /* ignore */ }
-    throw new Error(`Chrome launched but DevToolsActivePort not written after 30s. Profile: ${userDataDir}`);
+    throw new Error(
+      `Chrome launched but DevTools port didn't become available after 30s.\n` +
+      `Profile: ${userDataDir}\n\n` +
+      `This usually means Chrome is already running and has locked the profile directory.\n` +
+      `Fix: close all Chrome windows and quit Chrome completely, then retry.\n` +
+      `  macOS: Chrome menu → Quit Google Chrome (⌘Q), or: pkill -x "Google Chrome"\n` +
+      `  Then: browseruse launch --profile system`,
+    );
   }
 
   // Write port and pid files for discovery
