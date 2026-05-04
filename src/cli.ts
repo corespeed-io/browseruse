@@ -20,6 +20,7 @@
 import { existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { homedir } from 'os';
+import { runServer } from './repl.ts';
 
 // ---------------------------------------------------------------------------
 // Config
@@ -61,9 +62,16 @@ async function startRepl(): Promise<void> {
     BROWSERUSE_PORT: String(PORT),
   };
 
+  // Detect compiled binary mode: if we're NOT running from a .ts source,
+  // spawn ourselves with --serve instead of invoking bun on repl.ts.
+  const isCompiledBinary = !process.argv[0]?.endsWith('.ts');
+  const cmd = isCompiledBinary
+    ? [process.execPath, '--serve']
+    : ['bun', REPL_PATH];
+
   // Spawn REPL in background
   const logFile = Bun.file(LOG_FILE);
-  const proc = Bun.spawn(['bun', REPL_PATH], {
+  const proc = Bun.spawn(cmd, {
     env,
     stdout: logFile,
     stderr: logFile,
@@ -220,6 +228,9 @@ async function main(): Promise<void> {
 
   // Lifecycle commands (don't need REPL auto-start)
   switch (cmd) {
+    case '--serve':
+      runServer();
+      return;
     case '--status':
       await cmdStatus();
       return;
