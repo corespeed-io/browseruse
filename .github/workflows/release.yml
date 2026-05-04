@@ -10,14 +10,7 @@ permissions:
 
 jobs:
   build:
-    strategy:
-      matrix:
-        include:
-          - runner: macos-14      # Apple Silicon
-            arch: arm64
-          - runner: macos-13      # Intel
-            arch: x64
-    runs-on: ${{ matrix.runner }}
+    runs-on: macos-14  # Apple Silicon — cross-compiles x64 via --target
     steps:
       - uses: actions/checkout@v4
 
@@ -28,36 +21,22 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Compile repl.ts into standalone binary
-        run: bun build --compile src/repl.ts --outfile browseruse-repl
-
-      - name: Create tarball
+      - name: Compile repl.ts (arm64 native + x64 cross-compile)
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          TARBALL="browseruse-repl-${VERSION}-darwin-${{ matrix.arch }}.tar.gz"
-          tar czf "$TARBALL" browseruse-repl
-          shasum -a 256 "$TARBALL" > "${TARBALL}.sha256"
-          echo "TARBALL=$TARBALL" >> "$GITHUB_ENV"
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: browseruse-repl-darwin-${{ matrix.arch }}
-          path: |
-            ${{ env.TARBALL }}
-            ${{ env.TARBALL }}.sha256
+          # arm64 (native)
+          bun build --compile src/repl.ts --outfile browseruse-repl
+          tar czf "browseruse-repl-${VERSION}-darwin-arm64.tar.gz" browseruse-repl
+          rm browseruse-repl
 
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          merge-multiple: true
+          # x64 (cross-compile)
+          bun build --compile --target=bun-darwin-x64 src/repl.ts --outfile browseruse-repl
+          tar czf "browseruse-repl-${VERSION}-darwin-x64.tar.gz" browseruse-repl
+          rm browseruse-repl
 
-      - name: Combine checksums
-        run: cat *.sha256 > checksums.txt
+      - name: Generate checksums
+        run: shasum -a 256 browseruse-repl-*.tar.gz > checksums.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
