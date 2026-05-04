@@ -107,7 +107,11 @@ export class Session implements Transport {
       }
       // All detected browsers refused — don't auto-launch, report what we found
       throw new Error(
-        `No detected browser accepted a connection. If one of these is the browser you want, click "Allow" on its remote-debugging prompt and retry:\n${errors.join('\n')}`,
+        `Detected browsers but none accepted a CDP connection:\n${errors.join('\n')}\n\n` +
+        `Chrome must be launched with remote debugging enabled. To fix:\n` +
+        `  1. Quit Chrome completely: pkill -x "Google Chrome"\n` +
+        `  2. Relaunch via browseruse: browseruse launch --profile system\n` +
+        `  Or relaunch Chrome manually with: /Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --remote-debugging-port=9222`,
       );
     }
 
@@ -127,7 +131,11 @@ export class Session implements Transport {
     if (opts.noAutoLaunch) {
       const scanned = getBrowserCandidates().map(c => c.name).join(', ');
       throw new Error(
-        `No running browser with remote debugging detected and auto-launch is disabled. Scanned: ${scanned}.`,
+        `No running browser with remote debugging detected (auto-launch disabled).\n` +
+        `Scanned: ${scanned}.\n\n` +
+        `To enable remote debugging, launch Chrome with:\n` +
+        `  /Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --remote-debugging-port=9222\n` +
+        `Or remove --no-auto-launch and let browseruse launch Chrome for you.`,
       );
     }
 
