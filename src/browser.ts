@@ -18,8 +18,13 @@ import { homedir } from 'os';
 // ---------------------------------------------------------------------------
 
 export type LaunchOptions = {
-  /** Profile name. Defaults to 'default'. Maps to ~/.browseruse/profiles/<name>/ */
+  /** Profile name. Defaults to 'default'. Maps to ~/.browseruse/profiles/<name>/.
+   *  Special value 'system' reuses the user's real Chrome profile
+   *  (~/Library/Application Support/Google/Chrome on macOS) — preserves logins,
+   *  bookmarks, extensions, etc. Chrome must not already be running (profile lock). */
   profile?: string;
+  /** Explicit user-data-dir path. Overrides profile name resolution. */
+  userDataDir?: string;
   /** Explicit port. If 0 or omitted, picks an ephemeral port. */
   port?: number;
   /** Run headless (no visible window). Default: false. */
@@ -46,6 +51,23 @@ const PID_FILE = join(BROWSERUSE_DIR, 'cdp-pid');
 
 function profileDir(name: string): string {
   return join(PROFILES_DIR, name);
+}
+
+/**
+ * Resolve the system Chrome user-data directory for the current platform.
+ * This is where the user's real profile lives (logins, bookmarks, extensions).
+ */
+function systemChromeProfileDir(): string {
+  const home = homedir();
+  if (process.platform === 'darwin') {
+    return join(home, 'Library', 'Application Support', 'Google', 'Chrome');
+  } else if (process.platform === 'linux') {
+    return join(home, '.config', 'google-chrome');
+  } else if (process.platform === 'win32') {
+    const localAppData = process.env.LOCALAPPDATA ?? join(home, 'AppData', 'Local');
+    return join(localAppData, 'Google', 'Chrome', 'User Data');
+  }
+  throw new Error(`Unsupported platform for system Chrome profile: ${process.platform}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -151,7 +173,8 @@ const DEFAULT_FLAGS = [
  */
 export async function launchBrowser(opts: LaunchOptions = {}): Promise<ManagedBrowser> {
   const profile = opts.profile ?? 'default';
-  const userDataDir = profileDir(profile);
+  const userDataDir = opts.userDataDir
+    ?? (profile === 'system' ? systemChromeProfileDir() : profileDir(profile));
   const port = opts.port ?? 0; // 0 = let Chrome pick an ephemeral port
 
   // Ensure directories exist
