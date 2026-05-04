@@ -77,12 +77,17 @@ export class Session implements Transport {
    *
    * With explicit opts ({ wsUrl } | { profileDir }), connects directly to that
    * single URL with a generous timeout.
+   *
+   * After connecting, auto-attaches to the first available page target so that
+   * page-level CDP methods (Page.navigate, Page.captureScreenshot, etc.) work
+   * immediately without a manual `session.use(targetId)` call.
    */
   async connect(opts: ConnectOptions = {}): Promise<void> {
     const timeoutMs = opts.timeoutMs ?? 5_000;
     if (opts.wsUrl || opts.profileDir) {
       const wsUrl = await resolveWsUrl(opts);
       await this.openWs(wsUrl, timeoutMs);
+      await this.autoAttach();
       return;
     }
 
@@ -93,6 +98,7 @@ export class Session implements Transport {
       for (const b of browsers) {
         try {
           await this.openWs(b.wsUrl, timeoutMs);
+          await this.autoAttach();
           return;
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
@@ -109,10 +115,10 @@ export class Session implements Transport {
     const managed = getManagedBrowser();
     if (managed) {
       // Try connecting to the managed browser
-      const dtapPath = `${managed.profileDir}/DevToolsActivePort`;
       try {
         const { port, path } = await readDevToolsActivePort(managed.profileDir);
         await this.openWs(`ws://127.0.0.1:${port}${path}`, timeoutMs);
+        await this.autoAttach();
         return;
       } catch { /* managed browser may be stale, fall through to launch */ }
     }
@@ -128,6 +134,33 @@ export class Session implements Transport {
     const launched = await launchBrowser(opts.launch);
     const { port, path } = await readDevToolsActivePort(launched.profileDir);
     await this.openWs(`ws://127.0.0.1:${port}${path}`, timeoutMs);
+    await this.autoAttach();
+  }
+
+  /**
+   * Auto-attach to the first page target after connecting.
+   * If no page targets exist, creates a blank page and attaches to it.
+   */
+  private async autoAttach(): Promise<void> {
+    if (this.activeSessionId) return; // already attached
+
+    const { targetInfos } = await this._call('Target.getTargets', {}) as {
+      targetInfos: Array<{ targetId: string; type: string; url: string }>;
+    };
+
+    // Find the first non-internal page target
+    const page = targetInfos.find(
+      t => t.type === 'page' && !t.url.startsWith('chrome://') && !t.url.startsWith('devtools://'),
+    ) ?? targetInfos.find(t => t.type === 'page');
+
+    if (page) {
+      await this.use(page.targetId);
+      return;
+    }
+
+    // No page targets — create a blank one
+    const { targetId } = await this._call('Target.createTarget', { url: 'about:blank' }) as { targetId: string };
+    await this.use(targetId);
   }
 
   private openWs(wsUrl: string, timeoutMs: number): Promise<void> {
