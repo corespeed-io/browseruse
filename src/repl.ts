@@ -69,121 +69,127 @@ function renderResult(v: unknown): string {
   return JSON.stringify(s);
 }
 
-const server = Bun.serve({
-  port: PORT,
-  hostname: '127.0.0.1',
-  async fetch(req) {
-    const url = new URL(req.url);
+export function runServer(): void {
+  const server = Bun.serve({
+    port: PORT,
+    hostname: '127.0.0.1',
+    async fetch(req) {
+      const url = new URL(req.url);
 
-    // GET /health
-    if (req.method === 'GET' && url.pathname === '/health') {
-      return Response.json({
-        ok: true,
-        uptime: Math.floor((Date.now() - startedAt) / 1000),
-        connected: session.isConnected(),
-        sessionId: session.getActiveSession() ?? null,
-        managedBrowser: getManagedBrowser() ?? null,
-      });
-    }
-
-    // GET /browsers
-    if (req.method === 'GET' && url.pathname === '/browsers') {
-      try {
-        const browsers = await detectBrowsers();
-        return new Response(JSON.stringify(browsers, null, 2), { headers: JSON_CT });
-      } catch (e: any) {
-        return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: JSON_CT });
-      }
-    }
-
-    // GET /tabs
-    if (req.method === 'GET' && url.pathname === '/tabs') {
-      if (!session.isConnected()) {
-        return new Response(JSON.stringify({ error: 'Not connected. POST /connect first.' }), { status: 400, headers: JSON_CT });
-      }
-      try {
-        const tabs = await listPageTargets(session);
-        return new Response(JSON.stringify(tabs, null, 2), { headers: JSON_CT });
-      } catch (e: any) {
-        return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: JSON_CT });
-      }
-    }
-
-    // POST /connect
-    if (req.method === 'POST' && url.pathname === '/connect') {
-      try {
-        const body = await req.text();
-        const opts = body.trim() ? JSON.parse(body) : {};
-        await session.connect(opts);
+      // GET /health
+      if (req.method === 'GET' && url.pathname === '/health') {
         return Response.json({
           ok: true,
-          connected: true,
+          uptime: Math.floor((Date.now() - startedAt) / 1000),
+          connected: session.isConnected(),
           sessionId: session.getActiveSession() ?? null,
           managedBrowser: getManagedBrowser() ?? null,
         });
-      } catch (e: any) {
-        return new Response(JSON.stringify({ ok: false, error: e.message }), { status: 500, headers: JSON_CT });
       }
-    }
 
-    // POST /launch
-    if (req.method === 'POST' && url.pathname === '/launch') {
-      try {
-        const body = await req.text();
-        const opts = body.trim() ? JSON.parse(body) : {};
-        const browser = await launchBrowser(opts);
-        return Response.json({ ok: true, ...browser });
-      } catch (e: any) {
-        return new Response(JSON.stringify({ ok: false, error: e.message }), { status: 500, headers: JSON_CT });
+      // GET /browsers
+      if (req.method === 'GET' && url.pathname === '/browsers') {
+        try {
+          const browsers = await detectBrowsers();
+          return new Response(JSON.stringify(browsers, null, 2), { headers: JSON_CT });
+        } catch (e: any) {
+          return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: JSON_CT });
+        }
       }
-    }
 
-    // POST /eval
-    if (req.method === 'POST' && url.pathname === '/eval') {
-      const code = await req.text();
-      if (!code.trim()) {
-        return new Response('empty body\n', { status: 400, headers: TEXT });
+      // GET /tabs
+      if (req.method === 'GET' && url.pathname === '/tabs') {
+        if (!session.isConnected()) {
+          return new Response(JSON.stringify({ error: 'Not connected. POST /connect first.' }), { status: 400, headers: JSON_CT });
+        }
+        try {
+          const tabs = await listPageTargets(session);
+          return new Response(JSON.stringify(tabs, null, 2), { headers: JSON_CT });
+        } catch (e: any) {
+          return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: JSON_CT });
+        }
       }
-      try {
-        const result = await runSnippet(code);
-        const body = renderResult(result);
-        return new Response(body, { status: 200, headers: TEXT });
-      } catch (e: any) {
-        const msg = (e?.stack ?? e?.message ?? String(e)) + '\n';
-        return new Response(msg, { status: 500, headers: TEXT });
+
+      // POST /connect
+      if (req.method === 'POST' && url.pathname === '/connect') {
+        try {
+          const body = await req.text();
+          const opts = body.trim() ? JSON.parse(body) : {};
+          await session.connect(opts);
+          return Response.json({
+            ok: true,
+            connected: true,
+            sessionId: session.getActiveSession() ?? null,
+            managedBrowser: getManagedBrowser() ?? null,
+          });
+        } catch (e: any) {
+          return new Response(JSON.stringify({ ok: false, error: e.message }), { status: 500, headers: JSON_CT });
+        }
       }
-    }
 
-    // POST /quit
-    if (req.method === 'POST' && url.pathname === '/quit') {
-      setTimeout(async () => {
-        await closeManagedBrowser();
-        server.stop(true);
-        session.close();
-        process.exit(0);
-      }, 50);
-      return Response.json({ ok: true });
-    }
+      // POST /launch
+      if (req.method === 'POST' && url.pathname === '/launch') {
+        try {
+          const body = await req.text();
+          const opts = body.trim() ? JSON.parse(body) : {};
+          const browser = await launchBrowser(opts);
+          return Response.json({ ok: true, ...browser });
+        } catch (e: any) {
+          return new Response(JSON.stringify({ ok: false, error: e.message }), { status: 500, headers: JSON_CT });
+        }
+      }
 
-    return new Response('not found', { status: 404 });
-  },
-});
+      // POST /eval
+      if (req.method === 'POST' && url.pathname === '/eval') {
+        const code = await req.text();
+        if (!code.trim()) {
+          return new Response('empty body\n', { status: 400, headers: TEXT });
+        }
+        try {
+          const result = await runSnippet(code);
+          const body = renderResult(result);
+          return new Response(body, { status: 200, headers: TEXT });
+        } catch (e: any) {
+          const msg = (e?.stack ?? e?.message ?? String(e)) + '\n';
+          return new Response(msg, { status: 500, headers: TEXT });
+        }
+      }
 
-// Clean up managed browser on unexpected exit
-process.on('SIGINT', async () => {
-  await closeManagedBrowser();
-  session.close();
-  process.exit(0);
-});
-process.on('SIGTERM', async () => {
-  await closeManagedBrowser();
-  session.close();
-  process.exit(0);
-});
+      // POST /quit
+      if (req.method === 'POST' && url.pathname === '/quit') {
+        setTimeout(async () => {
+          await closeManagedBrowser();
+          server.stop(true);
+          session.close();
+          process.exit(0);
+        }, 50);
+        return Response.json({ ok: true });
+      }
 
-console.log(JSON.stringify({
-  ok: true,
-  ready: true,
-  port: server.port,
-  message: `browseruse REPL listening on http://127.0.0.1:${server.port}`,
-}));
+      return new Response('not found', { status: 404 });
+    },
+  });
+
+  // Clean up managed browser on unexpected exit
+  process.on('SIGINT', async () => {
+    await closeManagedBrowser();
+    session.close();
+    process.exit(0);
+  });
+  process.on('SIGTERM', async () => {
+    await closeManagedBrowser();
+    session.close();
+    process.exit(0);
+  });
+
+  console.log(JSON.stringify({
+    ok: true,
+    ready: true,
+    port: server.port,
+    message: `browseruse REPL listening on http://127.0.0.1:${server.port}`,
+  }));
+}
+
+if (import.meta.main) {
+  runServer();
+}
