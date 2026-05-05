@@ -87,6 +87,38 @@ browseruse 'const t = await listPageTargets(); await session.use(t[0].targetId)'
 browseruse 'await session.Page.navigate({url:"https://example.com"})'
 ```
 
+### Common CDP patterns
+
+**Open a URL in a NEW tab** (use `Target.createTarget`, not `Page.navigate`):
+
+```js
+// CORRECT — opens new tab
+const {targetId} = await session.Target.createTarget({url: 'https://example.com'})
+await session.use(targetId)  // switch to the new tab
+
+// WRONG — replaces current tab content
+await session.Page.navigate({url: 'https://example.com'})
+```
+
+**Navigate the current tab** (replaces current page):
+
+```js
+await session.Page.navigate({url: 'https://example.com'})
+```
+
+**Close a tab:**
+
+```js
+await session.Target.closeTarget({targetId: 'TARGET_ID'})
+```
+
+**Switch between tabs:**
+
+```js
+const tabs = await listPageTargets()
+await session.use(tabs[0].targetId)  // switch to first tab
+```
+
 ### CDP method calls
 
 Every method takes one object argument matching CDP wire params, returns the typed result:
