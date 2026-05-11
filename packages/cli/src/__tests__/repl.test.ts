@@ -32,7 +32,7 @@ beforeAll(async () => {
   port = randomPort();
   baseUrl = `http://127.0.0.1:${port}`;
 
-  proc = Bun.spawn(['bun', 'src/repl.ts'], {
+  proc = Bun.spawn(['bun', 'packages/cli/src/repl.ts'], {
     env: { ...process.env, BROWSERUSE_PORT: String(port) },
     stdout: 'pipe',
     stderr: 'pipe',

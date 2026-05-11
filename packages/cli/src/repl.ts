@@ -11,6 +11,7 @@
  *   POST /connect   Connect session. Body: JSON ConnectOptions or empty for auto.
  *   POST /launch    Launch managed browser. Body: JSON LaunchOptions or empty.
  *   POST /quit      Graceful shutdown. Returns {"ok":true} then exits.
+ *   WS   /ws        JSON-RPC 2.0 WebSocket for agents and Chrome extension.
  *
  * State: `session`, the active sessionId, event subscribers, and any
  * `globalThis.<name>` you set persist across requests for the lifetime of
@@ -20,6 +21,7 @@
 import { Session, listPageTargets, resolveWsUrl, detectBrowsers } from './session.ts';
 import { launchBrowser, getManagedBrowser, closeManagedBrowser } from './browser.ts';
 import * as Generated from './generated.ts';
+import { handleWsOpen, handleWsClose, handleWsMessage, type WsData } from './ws-handler.ts';
 
 const session = new Session();
 (globalThis as any).session = session;
@@ -70,11 +72,20 @@ function renderResult(v: unknown): string {
 }
 
 export function runServer(): void {
-  const server = Bun.serve({
+  const server = Bun.serve<WsData>({
     port: PORT,
     hostname: '127.0.0.1',
-    async fetch(req) {
+    async fetch(req, server) {
       const url = new URL(req.url);
+
+      // WS /ws — upgrade to WebSocket
+      if (url.pathname === '/ws') {
+        const upgraded = server.upgrade(req, { data: { clientId: '' } });
+        if (!upgraded) {
+          return new Response('WebSocket upgrade failed', { status: 400 });
+        }
+        return undefined;
+      }
 
       // GET /health
       if (req.method === 'GET' && url.pathname === '/health') {
@@ -167,6 +178,17 @@ export function runServer(): void {
       }
 
       return new Response('not found', { status: 404 });
+    },
+    websocket: {
+      open(ws) {
+        handleWsOpen(ws);
+      },
+      message(ws, message) {
+        handleWsMessage(ws, message as string | Buffer, session, startedAt);
+      },
+      close(ws) {
+        handleWsClose(ws, session, startedAt);
+      },
     },
   });
 

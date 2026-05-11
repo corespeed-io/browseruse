@@ -1,0 +1,8 @@
+{
+  "name": "@browseruse/protocol",
+  "version": "0.3.0",
+  "type": "module",
+  "private": true,
+  "main": "index.ts",
+  "types": "index.ts"
+}

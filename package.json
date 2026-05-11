@@ -3,17 +3,25 @@
   "version": "0.3.0",
   "type": "module",
   "private": true,
+  "workspaces": ["packages/*"],
   "bin": {
-    "browseruse": "./src/cli.ts"
+    "browseruse": "./packages/cli/src/cli.ts"
   },
   "scripts": {
-    "gen": "bun src/gen.ts",
-    "repl": "bun src/repl.ts",
-    "start": "bun src/cli.ts --start",
-    "test": "bun test"
+    "gen": "bun packages/cli/src/gen.ts",
+    "repl": "bun packages/cli/src/repl.ts",
+    "start": "bun packages/cli/src/cli.ts --start",
+    "test": "bun test",
+    "build:ext": "bun extension/build.ts"
+  },
+  "dependencies": {
+    "@browseruse/cli": "workspace:*",
+    "@browseruse/protocol": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "@types/chrome": "^0.0.287",
+    "esbuild": "^0.24.0",
     "typescript": "^5.5.0"
   }
 }

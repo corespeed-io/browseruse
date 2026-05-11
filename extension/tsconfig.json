@@ -7,12 +7,8 @@
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "lib": ["ESNext", "DOM"]
+    "lib": ["ESNext", "DOM"],
+    "types": ["chrome"]
   },
-  "include": [],
-  "references": [
-    { "path": "packages/protocol" },
-    { "path": "packages/cli" },
-    { "path": "extension" }
-  ]
+  "include": ["src/**/*.ts"]
 }
