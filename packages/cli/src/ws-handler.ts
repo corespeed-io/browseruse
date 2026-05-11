@@ -200,20 +200,33 @@ async function handleServerMethod(
     }
 
     case Methods.SESSION_CDP_RAW: {
-      if (!session.isConnected()) {
-        throw { code: ErrorCodes.NOT_CONNECTED, message: 'CDP session not connected' };
-      }
       const cdpMethod = params.method as string;
       const cdpParams = (params.params as Record<string, unknown>) ?? {};
+      const tabId = params.tabId as number | undefined;
       if (!cdpMethod) {
         throw { code: ErrorCodes.INVALID_PARAMS, message: 'Missing "method" param' };
       }
-      try {
-        const result = await session._call(cdpMethod, cdpParams);
-        return result;
-      } catch (err: any) {
-        throw { code: ErrorCodes.CDP_ERROR, message: err.message ?? String(err) };
+
+      // If a direct CDP session is connected, use it
+      if (session.isConnected()) {
+        try {
+          const result = await session._call(cdpMethod, cdpParams);
+          return result;
+        } catch (err: any) {
+          throw { code: ErrorCodes.CDP_ERROR, message: err.message ?? String(err) };
+        }
       }
+
+      // Otherwise, forward to extension's debugger if available
+      if (extensionClient && tabId !== undefined) {
+        return forwardToExtension(
+          'cdp-raw',
+          Methods.DEBUGGER_SEND_COMMAND,
+          { tabId, method: cdpMethod, params: cdpParams },
+        );
+      }
+
+      throw { code: ErrorCodes.NOT_CONNECTED, message: 'No CDP session or extension debugger available' };
     }
 
     default:

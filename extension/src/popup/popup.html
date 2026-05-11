@@ -46,55 +46,36 @@
     }
     .dot.green { background: #10b981; }
     .dot.red { background: #ef4444; }
-    .field {
+    .info {
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #f9fafb;
       margin-bottom: 12px;
-    }
-    .field label {
-      display: block;
-      font-size: 11px;
-      font-weight: 500;
-      color: #6b7280;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-bottom: 4px;
-    }
-    .field input {
-      width: 100%;
-      padding: 6px 8px;
-      border: 1px solid #d1d5db;
-      border-radius: 6px;
-      font-size: 13px;
-      font-family: 'SF Mono', 'Fira Code', monospace;
-      outline: none;
-    }
-    .field input:focus {
-      border-color: #3b82f6;
-      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
-    }
-    .actions {
-      display: flex;
-      gap: 8px;
-    }
-    .btn {
-      flex: 1;
-      padding: 7px 12px;
-      border: none;
-      border-radius: 6px;
       font-size: 12px;
+      color: #6b7280;
+      line-height: 1.5;
+    }
+    .info .label {
       font-weight: 500;
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-    .btn-primary {
-      background: #3b82f6;
-      color: #fff;
-    }
-    .btn-primary:hover { background: #2563eb; }
-    .btn-secondary {
-      background: #f3f4f6;
       color: #374151;
     }
-    .btn-secondary:hover { background: #e5e7eb; }
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .info-row + .info-row {
+      margin-top: 4px;
+    }
+    .note {
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: #fffbeb;
+      color: #92400e;
+      font-size: 11px;
+      line-height: 1.4;
+      margin-bottom: 12px;
+    }
     .version {
       text-align: center;
       color: #9ca3af;
@@ -113,14 +94,15 @@
     <span id="statusText">Disconnected</span>
   </div>
 
-  <div class="field">
-    <label>Server URL</label>
-    <input id="urlInput" type="text" value="ws://127.0.0.1:9876/ws" spellcheck="false">
+  <div class="info">
+    <div class="info-row">
+      <span class="label">Debugger tabs</span>
+      <span id="attachedCount">0</span>
+    </div>
   </div>
 
-  <div class="actions">
-    <button id="saveBtn" class="btn btn-primary">Save</button>
-    <button id="reconnectBtn" class="btn btn-secondary">Reconnect</button>
+  <div class="note">
+    The debugger shows a yellow warning bar on attached tabs. This is expected and required for full CDP access.
   </div>
 
   <div class="version" id="version"></div>

@@ -15,6 +15,10 @@ export const Events = {
   TAB_REMOVED: 'event.tabRemoved',
   /** Tab was updated (forwarded from extension). */
   TAB_UPDATED: 'event.tabUpdated',
+  /** Debugger was detached from a tab (user cancelled or tab closed). */
+  DEBUGGER_DETACHED: 'event.debuggerDetached',
+  /** CDP event forwarded from chrome.debugger. */
+  DEBUGGER_EVENT: 'event.debuggerEvent',
 } as const;
 
 export type EventName = (typeof Events)[keyof typeof Events];
@@ -49,4 +53,15 @@ export interface TabUpdatedEvent {
   url?: string;
   title?: string;
   status?: string;
+}
+
+export interface DebuggerDetachedEvent {
+  tabId: number;
+  reason: string;
+}
+
+export interface DebuggerEventData {
+  tabId: number;
+  method: string;
+  params?: Record<string, unknown>;
 }

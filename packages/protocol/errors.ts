@@ -21,6 +21,9 @@ export const ErrorCodes = {
   ELEMENT_NOT_FOUND: -32004,
   EVAL_ERROR: -32005,
   CDP_ERROR: -32006,
+  DEBUGGER_ATTACH_FAILED: -32007,
+  DEBUGGER_DETACHED: -32008,
+  NATIVE_HOST_ERROR: -32009,
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

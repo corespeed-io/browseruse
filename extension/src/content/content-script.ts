@@ -1,15 +1,17 @@
 /**
- * Content script — runs in every page, handles DOM manipulation commands
- * from the service worker.
+ * Content script — runs in every page, provides visual feedback only.
  *
- * Visual feedback inspired by Playwriter:
+ * DOM manipulation is now handled via CDP (chrome.debugger) instead of
+ * content script messaging. This script only handles visual overlays:
  * - Ghost cursor: SVG arrow pointer with smooth CSS transition movement and
  *   press-down scale animation (two-element: outer=translate, inner=scale).
  * - Element highlight: four 1px edge divs with translucent fill overlay,
  *   positioned via getBoundingClientRect.
+ * - Click ripple effect.
+ *
+ * Listens for visual.showCursor, visual.highlight, visual.click messages
+ * from the service worker.
  */
-
-import { ErrorCodes } from '@browseruse/protocol';
 
 // ---------------------------------------------------------------------------
 // Ghost cursor (Playwriter-style two-element cursor)
@@ -210,15 +212,14 @@ function ensureOverlay(): HTMLDivElement {
   return container;
 }
 
-function highlightElement(el: Element): void {
-  const rect = el.getBoundingClientRect();
+function highlightRect(x: number, y: number, width: number, height: number): void {
   const container = ensureOverlay();
 
   Object.assign(container.style, {
-    top: `${rect.top}px`,
-    left: `${rect.left}px`,
-    width: `${rect.width}px`,
-    height: `${rect.height}px`,
+    top: `${y}px`,
+    left: `${x}px`,
+    width: `${width}px`,
+    height: `${height}px`,
     display: 'block',
     opacity: '1',
   });
@@ -231,114 +232,30 @@ function highlightElement(el: Element): void {
 }
 
 // ---------------------------------------------------------------------------
-// DOM command handlers
-// ---------------------------------------------------------------------------
-
-type DomHandler = (params: Record<string, unknown>) => unknown;
-
-const domHandlers: Record<string, DomHandler> = {
-  'dom.query'(params) {
-    const el = document.querySelector(params.selector as string);
-    if (!el) return { found: false };
-    highlightElement(el);
-    const attrs: Record<string, string> = {};
-    for (const attr of el.attributes) {
-      attrs[attr.name] = attr.value;
-    }
-    return {
-      found: true,
-      text: el.textContent?.trim() ?? '',
-      tagName: el.tagName.toLowerCase(),
-      attributes: attrs,
-    };
-  },
-
-  'dom.queryAll'(params) {
-    const els = document.querySelectorAll(params.selector as string);
-    const elements = Array.from(els).map((el, index) => {
-      const attrs: Record<string, string> = {};
-      for (const attr of el.attributes) {
-        attrs[attr.name] = attr.value;
-      }
-      return {
-        index,
-        text: el.textContent?.trim() ?? '',
-        tagName: el.tagName.toLowerCase(),
-        attributes: attrs,
-      };
-    });
-    return { count: elements.length, elements };
-  },
-
-  'dom.click'(params) {
-    const el = document.querySelector(params.selector as string);
-    if (!el) throw { code: ErrorCodes.ELEMENT_NOT_FOUND, message: `Element not found: ${params.selector}` };
-    highlightElement(el);
-    const rect = el.getBoundingClientRect();
-    const x = rect.left + rect.width / 2;
-    const y = rect.top + rect.height / 2;
-    showClickAt(x, y);
-    (el as HTMLElement).click();
-    return { ok: true };
-  },
-
-  'dom.type'(params) {
-    const el = document.querySelector(params.selector as string) as HTMLInputElement | HTMLTextAreaElement | null;
-    if (!el) throw { code: ErrorCodes.ELEMENT_NOT_FOUND, message: `Element not found: ${params.selector}` };
-    highlightElement(el);
-    // Move cursor to element
-    const rect = el.getBoundingClientRect();
-    moveCursorTo(rect.left + rect.width / 2, rect.top + rect.height / 2, true);
-    el.focus();
-    if (params.clear) {
-      el.value = '';
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-    const text = params.text as string;
-    for (const char of text) {
-      el.value += char;
-      el.dispatchEvent(new InputEvent('input', { bubbles: true, data: char, inputType: 'insertText' }));
-    }
-    el.dispatchEvent(new Event('change', { bubbles: true }));
-    return { ok: true };
-  },
-
-  'dom.getText'(params) {
-    const el = document.querySelector(params.selector as string);
-    if (!el) throw { code: ErrorCodes.ELEMENT_NOT_FOUND, message: `Element not found: ${params.selector}` };
-    highlightElement(el);
-    return { text: el.textContent?.trim() ?? '' };
-  },
-
-  'dom.getHtml'(params) {
-    const el = document.querySelector(params.selector as string);
-    if (!el) throw { code: ErrorCodes.ELEMENT_NOT_FOUND, message: `Element not found: ${params.selector}` };
-    return { html: params.outer ? el.outerHTML : el.innerHTML };
-  },
-};
-
-// ---------------------------------------------------------------------------
-// Message listener
+// Message listener — visual commands only
 // ---------------------------------------------------------------------------
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   const { method, params } = message;
+  if (!method) return false;
 
-  if (!method || !domHandlers[method]) {
-    return false;
+  switch (method) {
+    case 'visual.showCursor':
+      moveCursorTo(params.x, params.y, params.animate ?? true);
+      sendResponse({ ok: true });
+      return true;
+
+    case 'visual.highlight':
+      highlightRect(params.x, params.y, params.width, params.height);
+      sendResponse({ ok: true });
+      return true;
+
+    case 'visual.click':
+      showClickAt(params.x, params.y);
+      sendResponse({ ok: true });
+      return true;
+
+    default:
+      return false;
   }
-
-  try {
-    const result = domHandlers[method](params ?? {});
-    sendResponse({ result });
-  } catch (err: any) {
-    sendResponse({
-      error: {
-        code: err.code ?? -32603,
-        message: err.message ?? String(err),
-      },
-    });
-  }
-
-  return true;
 });

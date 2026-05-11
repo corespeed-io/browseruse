@@ -9,7 +9,7 @@
 
 import { build } from 'esbuild';
 import { cpSync, mkdirSync, rmSync, existsSync } from 'fs';
-import { join, dirname } from 'path';
+import { join } from 'path';
 
 const EXT_DIR = import.meta.dir;
 const ROOT = join(EXT_DIR, '..');
@@ -25,7 +25,6 @@ mkdirSync(DIST, { recursive: true });
 await build({
   entryPoints: [
     join(SRC, 'background/service-worker.ts'),
-    join(SRC, 'offscreen/offscreen.ts'),
     join(SRC, 'content/content-script.ts'),
     join(SRC, 'popup/popup.ts'),
   ],
@@ -46,7 +45,6 @@ await build({
 // Copy static assets
 cpSync(join(EXT_DIR, 'manifest.json'), join(DIST, 'manifest.json'));
 cpSync(join(EXT_DIR, 'icons'), join(DIST, 'icons'), { recursive: true });
-cpSync(join(SRC, 'offscreen/offscreen.html'), join(DIST, 'offscreen/offscreen.html'));
 cpSync(join(SRC, 'popup/popup.html'), join(DIST, 'popup/popup.html'));
 
 console.log('Extension built → extension/dist/');

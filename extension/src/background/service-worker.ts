@@ -1,78 +1,98 @@
 /**
  * Service worker — main background script for the Chrome extension.
  *
- * Ensures the offscreen document stays alive, routes incoming JSON-RPC
- * requests from the server (relayed via offscreen) to appropriate handlers,
- * and sends responses back.
+ * Uses native messaging (chrome.runtime.connectNative) to communicate with
+ * the browseruse REPL server via the native host bridge. Routes JSON-RPC
+ * requests to tab handlers (chrome.tabs) or debugger handlers (chrome.debugger).
  */
 
 import { handleTabsList, handleTabCreate, handleTabClose, handleTabNavigate, handleTabActivate, handleTabReload } from './tab-handlers';
-import { handlePageScreenshot, handlePageEval, handlePageGetUrl, handlePageGetTitle } from './page-handlers';
-import { handleGetCookies, handleSetCookie, handleDeleteCookies } from './network-handlers';
-import { Methods, ErrorCodes, makeSuccess, makeError } from '@browseruse/protocol';
+import {
+  attach as debuggerAttach,
+  detach as debuggerDetach,
+  sendCommand as debuggerSendCommand,
+  getAttachedTabs,
+  setEventCallback,
+  setDetachCallback,
+} from './debugger-handler';
+import { Methods, ErrorCodes, Events, makeSuccess, makeError, makeNotification } from '@browseruse/protocol';
+
+const NATIVE_HOST_NAME = 'com.browseruse.host';
 
 // ---------------------------------------------------------------------------
-// Offscreen document management
+// Native messaging connection
 // ---------------------------------------------------------------------------
 
-let offscreenCreating: Promise<void> | null = null;
+let nativePort: chrome.runtime.Port | null = null;
+let nativeConnected = false;
 
-async function ensureOffscreen(): Promise<void> {
-  const existingContexts = await chrome.runtime.getContexts({
-    contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT],
-  });
-  if (existingContexts.length > 0) return;
-
-  if (offscreenCreating) {
-    await offscreenCreating;
+function connectNative(): void {
+  try {
+    nativePort = chrome.runtime.connectNative(NATIVE_HOST_NAME);
+  } catch (err) {
+    nativeConnected = false;
+    scheduleReconnect();
     return;
   }
 
-  offscreenCreating = chrome.offscreen.createDocument({
-    url: 'offscreen/offscreen.html',
-    reasons: [chrome.offscreen.Reason.WEB_RTC as any],
-    justification: 'Maintain persistent WebSocket connection to browseruse server',
+  nativePort.onMessage.addListener((message) => {
+    handleServerMessage(message);
   });
 
-  await offscreenCreating;
-  offscreenCreating = null;
+  nativePort.onDisconnect.addListener(() => {
+    const error = chrome.runtime.lastError;
+    nativeConnected = false;
+    nativePort = null;
+    // Notify popup
+    chrome.runtime.sendMessage({ type: 'connection-state', connected: false }).catch(() => {});
+    scheduleReconnect();
+  });
+
+  nativeConnected = true;
+  // Notify popup
+  chrome.runtime.sendMessage({ type: 'connection-state', connected: true }).catch(() => {});
 }
 
-// Create offscreen document on install/startup
-chrome.runtime.onInstalled.addListener(() => { ensureOffscreen(); });
-chrome.runtime.onStartup.addListener(() => { ensureOffscreen(); });
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-// Also ensure it exists when the service worker wakes up
-ensureOffscreen();
+function scheduleReconnect(): void {
+  if (reconnectTimer) return;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    connectNative();
+  }, 3000);
+}
+
+// Connect on startup
+chrome.runtime.onInstalled.addListener(() => { connectNative(); });
+chrome.runtime.onStartup.addListener(() => { connectNative(); });
+connectNative();
 
 // ---------------------------------------------------------------------------
-// Connection state tracking
+// Debugger event forwarding
 // ---------------------------------------------------------------------------
 
-let wsConnected = false;
+setEventCallback((tabId, method, params) => {
+  // Forward CDP events from chrome.debugger back to the server
+  sendToServer(makeNotification(Events.DEBUGGER_EVENT, { tabId, method, params }));
+});
+
+setDetachCallback((tabId, reason) => {
+  sendToServer(makeNotification(Events.DEBUGGER_DETACHED, { tabId, reason }));
+});
 
 // ---------------------------------------------------------------------------
-// Message routing from offscreen document
+// Message routing from popup
 // ---------------------------------------------------------------------------
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  // Only handle messages from our own extension
   if (sender.id !== chrome.runtime.id) return;
 
-  if (message.type === 'ws-state') {
-    wsConnected = message.connected;
-    // Notify popup about state change
-    chrome.runtime.sendMessage({ type: 'connection-state', connected: wsConnected }).catch(() => {});
-    return;
-  }
-
-  if (message.type === 'ws-message') {
-    handleServerMessage(message.data);
-    return;
-  }
-
   if (message.type === 'get-status') {
-    sendResponse({ connected: wsConnected });
+    sendResponse({
+      connected: nativeConnected,
+      attachedTabs: getAttachedTabs(),
+    });
     return true;
   }
 });
@@ -90,40 +110,21 @@ const handlers: Record<string, MethodHandler> = {
   [Methods.TABS_NAVIGATE]: handleTabNavigate,
   [Methods.TABS_ACTIVATE]: handleTabActivate,
   [Methods.TABS_RELOAD]: handleTabReload,
-  [Methods.PAGE_SCREENSHOT]: handlePageScreenshot,
-  [Methods.PAGE_EVAL]: handlePageEval,
-  [Methods.PAGE_GET_URL]: handlePageGetUrl,
-  [Methods.PAGE_GET_TITLE]: handlePageGetTitle,
-  [Methods.NETWORK_GET_COOKIES]: handleGetCookies,
-  [Methods.NETWORK_SET_COOKIE]: handleSetCookie,
-  [Methods.NETWORK_DELETE_COOKIES]: handleDeleteCookies,
+  [Methods.DEBUGGER_ATTACH]: (params) => debuggerAttach(params.tabId),
+  [Methods.DEBUGGER_DETACH]: (params) => debuggerDetach(params.tabId),
+  [Methods.DEBUGGER_SEND_COMMAND]: (params) => debuggerSendCommand(params.tabId, params.method, params.params),
 };
 
-// DOM methods are forwarded to the content script
-const DOM_METHODS = new Set([
-  Methods.DOM_QUERY, Methods.DOM_QUERY_ALL, Methods.DOM_CLICK,
-  Methods.DOM_TYPE, Methods.DOM_GET_TEXT, Methods.DOM_GET_HTML,
-]);
-
-async function handleServerMessage(raw: string): Promise<void> {
-  let msg: any;
-  try {
-    msg = JSON.parse(raw);
-  } catch {
-    return;
-  }
-
+async function handleServerMessage(msg: any): Promise<void> {
   // Only handle requests (have id + method)
-  if (!msg.id || !msg.method) return;
+  if (!msg || !msg.id || !msg.method) return;
 
   const { id, method, params } = msg;
 
   try {
     let result: unknown;
 
-    if (DOM_METHODS.has(method)) {
-      result = await forwardToContentScript(method, params ?? {});
-    } else if (handlers[method]) {
+    if (handlers[method]) {
       result = await handlers[method](params ?? {});
     } else {
       sendToServer(makeError(id, ErrorCodes.METHOD_NOT_FOUND, `Unknown method: ${method}`));
@@ -137,31 +138,15 @@ async function handleServerMessage(raw: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Content script communication
-// ---------------------------------------------------------------------------
-
-async function forwardToContentScript(method: string, params: Record<string, unknown>): Promise<unknown> {
-  const tabId = params.tabId as number;
-  if (tabId === undefined) {
-    throw { code: ErrorCodes.INVALID_PARAMS, message: 'Missing tabId param' };
-  }
-
-  // Send message to content script in the target tab
-  const response = await chrome.tabs.sendMessage(tabId, { method, params });
-
-  if (response?.error) {
-    throw { code: response.error.code ?? ErrorCodes.INTERNAL_ERROR, message: response.error.message };
-  }
-
-  return response?.result;
-}
-
-// ---------------------------------------------------------------------------
-// Send response back to server via offscreen
+// Send response back to server via native messaging
 // ---------------------------------------------------------------------------
 
 function sendToServer(msg: object): void {
-  chrome.runtime.sendMessage({ type: 'ws-send', data: JSON.stringify(msg) }).catch(() => {
-    // Offscreen may not be ready
-  });
+  if (nativePort) {
+    try {
+      nativePort.postMessage(msg);
+    } catch {
+      // Port may be disconnected
+    }
+  }
 }

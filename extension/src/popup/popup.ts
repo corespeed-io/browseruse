@@ -1,13 +1,11 @@
 /**
- * Popup script — connection status and server URL configuration.
+ * Popup script — connection status display for native messaging mode.
  */
 
 const statusEl = document.getElementById('status')!;
 const dotEl = document.getElementById('dot')!;
 const statusTextEl = document.getElementById('statusText')!;
-const urlInput = document.getElementById('urlInput') as HTMLInputElement;
-const saveBtn = document.getElementById('saveBtn')!;
-const reconnectBtn = document.getElementById('reconnectBtn')!;
+const attachedCountEl = document.getElementById('attachedCount')!;
 const versionEl = document.getElementById('version')!;
 
 versionEl.textContent = `v${chrome.runtime.getManifest().version}`;
@@ -24,12 +22,12 @@ function setConnected(connected: boolean): void {
   }
 }
 
-// Load saved URL
-chrome.storage.local.get('serverUrl', (data) => {
-  if (data.serverUrl) {
-    urlInput.value = data.serverUrl;
+function updateStatus(response: { connected: boolean; attachedTabs?: number[] }): void {
+  setConnected(response.connected);
+  if (response.attachedTabs) {
+    attachedCountEl.textContent = String(response.attachedTabs.length);
   }
-});
+}
 
 // Get current connection status
 chrome.runtime.sendMessage({ type: 'get-status' }, (response) => {
@@ -37,31 +35,14 @@ chrome.runtime.sendMessage({ type: 'get-status' }, (response) => {
     setConnected(false);
     return;
   }
-  setConnected(response?.connected ?? false);
+  if (response) {
+    updateStatus(response);
+  }
 });
 
 // Listen for state changes
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === 'connection-state') {
     setConnected(message.connected);
-  }
-  if (message.type === 'ws-state') {
-    setConnected(message.connected);
-  }
-});
-
-// Save URL
-saveBtn.addEventListener('click', () => {
-  const url = urlInput.value.trim();
-  if (!url) return;
-  chrome.storage.local.set({ serverUrl: url });
-});
-
-// Reconnect
-reconnectBtn.addEventListener('click', () => {
-  const url = urlInput.value.trim();
-  if (url) {
-    // Setting the URL triggers reconnect in offscreen.ts
-    chrome.storage.local.set({ serverUrl: url });
   }
 });

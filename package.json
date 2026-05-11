@@ -12,11 +12,13 @@
     "repl": "bun packages/cli/src/repl.ts",
     "start": "bun packages/cli/src/cli.ts --start",
     "test": "bun test",
-    "build:ext": "bun extension/build.ts"
+    "build:ext": "bun extension/build.ts",
+    "install:ext": "bun extension/install.ts"
   },
   "dependencies": {
     "@browseruse/cli": "workspace:*",
-    "@browseruse/protocol": "workspace:*"
+    "@browseruse/protocol": "workspace:*",
+    "puppeteer-core": "^24.43.1"
   },
   "devDependencies": {
     "@types/bun": "latest",
