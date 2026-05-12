@@ -13,6 +13,9 @@
  *   POST /quit      Graceful shutdown. Returns {"ok":true} then exits.
  *   WS   /ws        JSON-RPC 2.0 WebSocket for agents and Chrome extension.
  *
+ * Additionally listens on a Unix socket at ~/.browseruse/browseruse.sock
+ * for NDJSON control protocol (used by Sarea, scripts, etc.).
+ *
  * State: `session`, the active sessionId, event subscribers, and any
  * `globalThis.<name>` you set persist across requests for the lifetime of
  * the process.
@@ -22,19 +25,10 @@ import { Session, listPageTargets, resolveWsUrl, detectBrowsers } from './sessio
 import { launchBrowser, getManagedBrowser, closeManagedBrowser } from './browser.ts';
 import * as Generated from './generated.ts';
 import { handleWsOpen, handleWsClose, handleWsMessage, type WsData } from './ws-handler.ts';
-
-const session = new Session();
-(globalThis as any).session = session;
-(globalThis as any).listPageTargets = () => listPageTargets(session);
-(globalThis as any).resolveWsUrl = resolveWsUrl;
-(globalThis as any).detectBrowsers = detectBrowsers;
-(globalThis as any).launchBrowser = launchBrowser;
-(globalThis as any).getManagedBrowser = getManagedBrowser;
-(globalThis as any).closeManagedBrowser = closeManagedBrowser;
-(globalThis as any).CDP = Generated;
+import { startControlSocket, getSocketPath } from './control-socket.ts';
+import { unlinkSync } from 'fs';
 
 const PORT = Number(process.env.BROWSERUSE_PORT ?? process.env.CDP_REPL_PORT ?? 9876);
-const startedAt = Date.now();
 
 function isExpression(code: string): boolean {
   const trimmed = code.trim();
@@ -71,7 +65,48 @@ function renderResult(v: unknown): string {
   return JSON.stringify(s);
 }
 
-export function runServer(): void {
+// ---------------------------------------------------------------------------
+// Server options and context
+// ---------------------------------------------------------------------------
+
+export interface ServerOptions {
+  /** Suppress stdout output (e.g. for embedded / native-host mode). */
+  silent?: boolean;
+  /** Start Unix socket for NDJSON control protocol. Default: true. */
+  controlSocket?: boolean;
+}
+
+export interface ServerContext {
+  session: Session;
+  server: ReturnType<typeof Bun.serve>;
+  startedAt: number;
+}
+
+// ---------------------------------------------------------------------------
+// Socket cleanup helper
+// ---------------------------------------------------------------------------
+
+function cleanupSocket(): void {
+  try { unlinkSync(getSocketPath()); } catch {}
+}
+
+// ---------------------------------------------------------------------------
+// Main server
+// ---------------------------------------------------------------------------
+
+export function runServer(opts?: ServerOptions): ServerContext {
+  const session = new Session();
+  const startedAt = Date.now();
+
+  (globalThis as any).session = session;
+  (globalThis as any).listPageTargets = () => listPageTargets(session);
+  (globalThis as any).resolveWsUrl = resolveWsUrl;
+  (globalThis as any).detectBrowsers = detectBrowsers;
+  (globalThis as any).launchBrowser = launchBrowser;
+  (globalThis as any).getManagedBrowser = getManagedBrowser;
+  (globalThis as any).closeManagedBrowser = closeManagedBrowser;
+  (globalThis as any).CDP = Generated;
+
   const server = Bun.serve<WsData>({
     port: PORT,
     hostname: '127.0.0.1',
@@ -169,6 +204,7 @@ export function runServer(): void {
       // POST /quit
       if (req.method === 'POST' && url.pathname === '/quit') {
         setTimeout(async () => {
+          cleanupSocket();
           await closeManagedBrowser();
           server.stop(true);
           session.close();
@@ -192,24 +228,35 @@ export function runServer(): void {
     },
   });
 
-  // Clean up managed browser on unexpected exit
+  // Start Unix socket for NDJSON control protocol
+  if (opts?.controlSocket !== false) {
+    startControlSocket(session, startedAt);
+  }
+
+  // Clean up managed browser and socket on unexpected exit
   process.on('SIGINT', async () => {
+    cleanupSocket();
     await closeManagedBrowser();
     session.close();
     process.exit(0);
   });
   process.on('SIGTERM', async () => {
+    cleanupSocket();
     await closeManagedBrowser();
     session.close();
     process.exit(0);
   });
 
-  console.log(JSON.stringify({
-    ok: true,
-    ready: true,
-    port: server.port,
-    message: `browseruse REPL listening on http://127.0.0.1:${server.port}`,
-  }));
+  if (!opts?.silent) {
+    console.log(JSON.stringify({
+      ok: true,
+      ready: true,
+      port: server.port,
+      message: `browseruse REPL listening on http://127.0.0.1:${server.port}`,
+    }));
+  }
+
+  return { session, server, startedAt };
 }
 
 if (import.meta.main) {
