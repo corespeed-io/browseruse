@@ -51,11 +51,11 @@ function getNativeHostDir(): string {
 
 function main(): void {
   const { extensionId } = parseArgs();
-  const rootDir = resolve(import.meta.dir, '..');
+  const rootDir = resolve(import.meta.dir, '../..');
   const nativeHostScript = resolve(rootDir, 'packages', 'cli', 'src', 'native-host.ts');
 
   // 1. Create wrapper shell script
-  const wrapperPath = resolve(rootDir, 'extension', 'native-host-wrapper.sh');
+  const wrapperPath = resolve(rootDir, 'packages', 'extension', 'native-host-wrapper.sh');
   const wrapperContent = `#!/bin/sh
 exec bun "${nativeHostScript}" "$@"
 `;
@@ -86,7 +86,7 @@ exec bun "${nativeHostScript}" "$@"
 
   if (extensionId === DEFAULT_EXTENSION_ID) {
     console.log('\nWARNING: Using default extension ID. After loading the extension in Chrome,');
-    console.log('re-run with: bun extension/install.ts --extension-id <your-actual-extension-id>');
+    console.log('re-run with: bun packages/extension/install.ts --extension-id <your-actual-extension-id>');
   }
 }
 

@@ -12,8 +12,8 @@
     "repl": "bun packages/cli/src/repl.ts",
     "start": "bun packages/cli/src/cli.ts --start",
     "test": "bun test",
-    "build:ext": "bun extension/build.ts",
-    "install:ext": "bun extension/install.ts"
+    "build:ext": "bun packages/extension/build.ts",
+    "install:ext": "bun packages/extension/install.ts"
   },
   "dependencies": {
     "@browseruse/cli": "workspace:*",

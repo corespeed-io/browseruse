@@ -12,7 +12,7 @@ import { cpSync, mkdirSync, rmSync, existsSync } from 'fs';
 import { join } from 'path';
 
 const EXT_DIR = import.meta.dir;
-const ROOT = join(EXT_DIR, '..');
+const ROOT = join(EXT_DIR, '../..');
 const DIST = join(EXT_DIR, 'dist');
 const SRC = join(EXT_DIR, 'src');
 const PROTOCOL_DIR = join(ROOT, 'packages', 'protocol');
@@ -47,4 +47,4 @@ cpSync(join(EXT_DIR, 'manifest.json'), join(DIST, 'manifest.json'));
 cpSync(join(EXT_DIR, 'icons'), join(DIST, 'icons'), { recursive: true });
 cpSync(join(SRC, 'popup/popup.html'), join(DIST, 'popup/popup.html'));
 
-console.log('Extension built → extension/dist/');
+console.log('Extension built → packages/extension/dist/');

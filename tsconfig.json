@@ -13,6 +13,6 @@
   "references": [
     { "path": "packages/protocol" },
     { "path": "packages/cli" },
-    { "path": "extension" }
+    { "path": "packages/extension" }
   ]
 }
