@@ -68,7 +68,7 @@ src/
   generated.ts        Auto-generated CDP types (56 domains, 652 methods)
   browser_protocol.json
   js_protocol.json
-interaction-skills/   CDP pattern recipes (screenshots, cookies, tabs, etc.)
+  interaction-skills/  CDP pattern recipes (screenshots, cookies, tabs, etc.)
 SKILL.md              Agent-facing documentation
 ```
 
