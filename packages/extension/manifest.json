@@ -5,7 +5,6 @@
   "description": "Connect AI agents to your browser via browseruse.",
   "permissions": [
     "debugger",
-    "nativeMessaging",
     "tabs",
     "storage"
   ],

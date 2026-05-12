@@ -1,9 +1,9 @@
 /**
  * Service worker — main background script for the Chrome extension.
  *
- * Uses native messaging (chrome.runtime.connectNative) to communicate with
- * the browseruse REPL server via the native host bridge. Routes JSON-RPC
- * requests to tab handlers (chrome.tabs) or debugger handlers (chrome.debugger).
+ * Uses a direct WebSocket connection to the browseruse REPL server
+ * (ws://127.0.0.1:9876/ws). Routes JSON-RPC requests to tab handlers
+ * (chrome.tabs) or debugger handlers (chrome.debugger).
  */
 
 import { handleTabsList, handleTabCreate, handleTabClose, handleTabNavigate, handleTabActivate, handleTabReload } from './tab-handlers';
@@ -17,40 +17,56 @@ import {
 } from './debugger-handler';
 import { Methods, ErrorCodes, Events, makeSuccess, makeError, makeNotification } from '@browseruse/protocol';
 
-const NATIVE_HOST_NAME = 'com.browseruse.host';
+const WS_URL = 'ws://127.0.0.1:9876/ws';
 
 // ---------------------------------------------------------------------------
-// Native messaging connection
+// WebSocket connection
 // ---------------------------------------------------------------------------
 
-let nativePort: chrome.runtime.Port | null = null;
+let ws: WebSocket | null = null;
 let nativeConnected = false;
 
-function connectNative(): void {
+function connectWebSocket(): void {
   try {
-    nativePort = chrome.runtime.connectNative(NATIVE_HOST_NAME);
-  } catch (err) {
+    ws = new WebSocket(WS_URL);
+  } catch {
     nativeConnected = false;
     scheduleReconnect();
     return;
   }
 
-  nativePort.onMessage.addListener((message) => {
-    handleServerMessage(message);
-  });
+  ws.onopen = () => {
+    ws!.send(JSON.stringify({
+      jsonrpc: '2.0',
+      id: 'ext-handshake',
+      method: 'session.handshake',
+      params: { clientType: 'extension', version: '0.3.0' },
+    }));
+    nativeConnected = true;
+    // Notify popup
+    chrome.runtime.sendMessage({ type: 'connection-state', connected: true }).catch(() => {});
+  };
 
-  nativePort.onDisconnect.addListener(() => {
-    const error = chrome.runtime.lastError;
+  ws.onmessage = (event) => {
+    try {
+      const data = typeof event.data === 'string' ? event.data : String(event.data);
+      handleServerMessage(JSON.parse(data));
+    } catch {
+      // Ignore parse errors
+    }
+  };
+
+  ws.onclose = () => {
     nativeConnected = false;
-    nativePort = null;
+    ws = null;
     // Notify popup
     chrome.runtime.sendMessage({ type: 'connection-state', connected: false }).catch(() => {});
     scheduleReconnect();
-  });
+  };
 
-  nativeConnected = true;
-  // Notify popup
-  chrome.runtime.sendMessage({ type: 'connection-state', connected: true }).catch(() => {});
+  ws.onerror = () => {
+    // onclose will fire after this and handle reconnection
+  };
 }
 
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -59,14 +75,14 @@ function scheduleReconnect(): void {
   if (reconnectTimer) return;
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
-    connectNative();
+    connectWebSocket();
   }, 3000);
 }
 
 // Connect on startup
-chrome.runtime.onInstalled.addListener(() => { connectNative(); });
-chrome.runtime.onStartup.addListener(() => { connectNative(); });
-connectNative();
+chrome.runtime.onInstalled.addListener(() => { connectWebSocket(); });
+chrome.runtime.onStartup.addListener(() => { connectWebSocket(); });
+connectWebSocket();
 
 // ---------------------------------------------------------------------------
 // Debugger event forwarding
@@ -138,15 +154,15 @@ async function handleServerMessage(msg: any): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Send response back to server via native messaging
+// Send response back to server via WebSocket
 // ---------------------------------------------------------------------------
 
 function sendToServer(msg: object): void {
-  if (nativePort) {
+  if (ws?.readyState === WebSocket.OPEN) {
     try {
-      nativePort.postMessage(msg);
+      ws.send(JSON.stringify(msg));
     } catch {
-      // Port may be disconnected
+      // WebSocket may be closing
     }
   }
 }

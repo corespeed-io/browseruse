@@ -1,7 +1,0 @@
-{
-  "name": "com.browseruse.host",
-  "description": "browseruse native messaging host",
-  "path": "__NATIVE_HOST_PATH__",
-  "type": "stdio",
-  "allowed_origins": ["chrome-extension://__EXTENSION_ID__/"]
-}

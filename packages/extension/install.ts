@@ -1,41 +1,21 @@
 /**
- * Install script for the browseruse native messaging host.
+ * Install script for the browseruse Chrome extension.
  *
- * Sets up the native messaging host manifest so Chrome can spawn the
- * native host bridge process when the extension calls connectNative().
+ * The extension now uses a direct WebSocket connection to the REPL server,
+ * so native messaging host setup is no longer required. This script handles
+ * any remaining install tasks (currently: cleanup of legacy native host).
  *
  * Usage:
- *   bun extension/install.ts [--extension-id <ID>]
- *
- * The script:
- * 1. Creates a wrapper shell script that invokes `bun native-host.ts`
- * 2. Generates the Chrome native messaging host manifest with correct paths
- * 3. Places the manifest in the platform-appropriate directory
+ *   bun packages/extension/install.ts [--cleanup]
  */
 
-import { writeFileSync, mkdirSync, chmodSync, existsSync } from 'fs';
-import { join, resolve } from 'path';
+import { unlinkSync, existsSync } from 'fs';
+import { join } from 'path';
 import { platform, homedir } from 'os';
 
 const HOST_NAME = 'com.browseruse.host';
-const DEFAULT_EXTENSION_ID = 'your-extension-id-here';
 
-// Parse CLI args
-function parseArgs(): { extensionId: string } {
-  const args = process.argv.slice(2);
-  let extensionId = DEFAULT_EXTENSION_ID;
-
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--extension-id' && args[i + 1]) {
-      extensionId = args[i + 1];
-      i++;
-    }
-  }
-
-  return { extensionId };
-}
-
-function getNativeHostDir(): string {
+function getNativeHostDir(): string | null {
   const os = platform();
   const home = homedir();
 
@@ -45,49 +25,46 @@ function getNativeHostDir(): string {
     case 'linux':
       return join(home, '.config', 'google-chrome', 'NativeMessagingHosts');
     default:
-      throw new Error(`Unsupported platform: ${os}. Only macOS and Linux are supported.`);
+      return null;
+  }
+}
+
+function cleanupLegacyNativeHost(): void {
+  const hostDir = getNativeHostDir();
+  if (!hostDir) return;
+
+  const manifestPath = join(hostDir, `${HOST_NAME}.json`);
+  if (existsSync(manifestPath)) {
+    try {
+      unlinkSync(manifestPath);
+      console.log(`Removed legacy native messaging host manifest: ${manifestPath}`);
+    } catch (e: any) {
+      console.warn(`Warning: could not remove ${manifestPath}: ${e.message}`);
+    }
   }
 }
 
 function main(): void {
-  const { extensionId } = parseArgs();
-  const rootDir = resolve(import.meta.dir, '../..');
-  const nativeHostScript = resolve(rootDir, 'packages', 'cli', 'src', 'native-host.ts');
+  const args = process.argv.slice(2);
 
-  // 1. Create wrapper shell script
-  const wrapperPath = resolve(rootDir, 'packages', 'extension', 'native-host-wrapper.sh');
-  const wrapperContent = `#!/bin/sh
-exec bun "${nativeHostScript}" "$@"
-`;
-  writeFileSync(wrapperPath, wrapperContent);
-  chmodSync(wrapperPath, 0o755);
-  console.log(`Created wrapper script: ${wrapperPath}`);
-
-  // 2. Generate the native messaging host manifest
-  const manifest = {
-    name: HOST_NAME,
-    description: 'browseruse native messaging host',
-    path: wrapperPath,
-    type: 'stdio',
-    allowed_origins: [`chrome-extension://${extensionId}/`],
-  };
-
-  // 3. Place manifest in the platform-appropriate directory
-  const hostDir = getNativeHostDir();
-  if (!existsSync(hostDir)) {
-    mkdirSync(hostDir, { recursive: true });
+  if (args.includes('--cleanup')) {
+    cleanupLegacyNativeHost();
+    console.log('Cleanup complete.');
+    return;
   }
 
-  const manifestPath = join(hostDir, `${HOST_NAME}.json`);
-  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
-  console.log(`Installed native messaging host manifest: ${manifestPath}`);
-  console.log(`\nExtension ID: ${extensionId}`);
-  console.log(`Native host: ${wrapperPath}`);
+  // Clean up any legacy native messaging host
+  cleanupLegacyNativeHost();
 
-  if (extensionId === DEFAULT_EXTENSION_ID) {
-    console.log('\nWARNING: Using default extension ID. After loading the extension in Chrome,');
-    console.log('re-run with: bun packages/extension/install.ts --extension-id <your-actual-extension-id>');
-  }
+  console.log('browseruse extension install complete.');
+  console.log('');
+  console.log('The extension now connects directly via WebSocket to the REPL server.');
+  console.log('No native messaging host registration is needed.');
+  console.log('');
+  console.log('To use:');
+  console.log('  1. Start the REPL server: browseruse --start');
+  console.log('  2. Load the extension in Chrome (chrome://extensions, developer mode)');
+  console.log('  3. The extension will auto-connect to ws://127.0.0.1:9876/ws');
 }
 
 main();

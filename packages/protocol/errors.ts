@@ -24,6 +24,7 @@ export const ErrorCodes = {
   DEBUGGER_ATTACH_FAILED: -32007,
   DEBUGGER_DETACHED: -32008,
   NATIVE_HOST_ERROR: -32009,
+  AUTH_FAILED: -32010,
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
