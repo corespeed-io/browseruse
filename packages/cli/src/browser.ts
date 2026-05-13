@@ -203,10 +203,15 @@ export async function launchBrowser(opts: LaunchOptions = {}): Promise<ManagedBr
 
   const chromePath = findChromePath();
 
-  // Auto-load the browseruse extension so the user doesn't need to install it manually
+  // Auto-load the browseruse extension as a fallback for profiles that don't
+  // have the Chrome Web Store version installed. For 'system' profiles the user's
+  // real Chrome likely has the store extension already, so we skip --load-extension
+  // to avoid loading a duplicate.
   const extDir = extensionDistDir();
-  const extFlags = existsSync(join(extDir, 'manifest.json'))
-    ? [`--disable-extensions-except=${extDir}`, `--load-extension=${extDir}`]
+  const hasExt = existsSync(join(extDir, 'manifest.json'));
+  const isSystem = profile === 'system' || opts.userDataDir === systemChromeProfileDir();
+  const extFlags = (hasExt && !isSystem)
+    ? [`--load-extension=${extDir}`]
     : [];
 
   const args = [
