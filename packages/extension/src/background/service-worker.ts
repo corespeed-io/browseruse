@@ -17,7 +17,10 @@ import {
 } from './debugger-handler';
 import { Methods, ErrorCodes, Events, makeSuccess, makeError, makeNotification } from '@browseruse/protocol';
 
-const WS_URL = 'ws://127.0.0.1:9876/ws';
+const PORT = 9876;
+const HOST = '127.0.0.1';
+const WS_URL = `ws://${HOST}:${PORT}/ws`;
+const HEALTH_URL = `http://${HOST}:${PORT}/health`;
 
 // ---------------------------------------------------------------------------
 // WebSocket connection
@@ -26,7 +29,32 @@ const WS_URL = 'ws://127.0.0.1:9876/ws';
 let ws: WebSocket | null = null;
 let nativeConnected = false;
 
-function connectWebSocket(): void {
+/**
+ * Pre-flight health check before opening a WebSocket.
+ * Verifies that the server on PORT is actually a browseruse REPL that
+ * supports WebSocket, avoiding noisy 404 errors when a different service
+ * (or an older REPL without /ws) occupies the port.
+ */
+async function checkHealth(): Promise<boolean> {
+  try {
+    const res = await fetch(HEALTH_URL, { signal: AbortSignal.timeout(2000) });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return data?.ok === true;
+  } catch {
+    return false;
+  }
+}
+
+async function connectWebSocket(): Promise<void> {
+  // Verify the server is a browseruse REPL before attempting WebSocket
+  const healthy = await checkHealth();
+  if (!healthy) {
+    nativeConnected = false;
+    scheduleReconnect();
+    return;
+  }
+
   try {
     ws = new WebSocket(WS_URL);
   } catch {
