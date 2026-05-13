@@ -10,7 +10,7 @@
  */
 
 import { readFileSync, writeFileSync, unlinkSync, existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
 import { homedir } from 'os';
 
 // ---------------------------------------------------------------------------
@@ -48,6 +48,27 @@ const BROWSERUSE_DIR = join(homedir(), '.browseruse');
 const PROFILES_DIR = join(BROWSERUSE_DIR, 'profiles');
 const PORT_FILE = join(BROWSERUSE_DIR, 'cdp-port');
 const PID_FILE = join(BROWSERUSE_DIR, 'cdp-pid');
+
+/**
+ * Resolve the Chrome extension directory. Checks in order:
+ * 1. Sarea app bundle: .app/Contents/Resources/browseruse-extension/
+ * 2. Development: packages/extension/dist/ (relative to source)
+ */
+function extensionDistDir(): string {
+  const execDir = dirname(process.execPath);
+
+  // Bundled in Sarea.app: .app/Contents/Resources/bin/browseruse
+  // Extension at:         .app/Contents/Resources/browseruse-extension/
+  if (execDir.includes('.app/Contents/')) {
+    const resourcesDir = join(execDir, '..');
+    const bundled = join(resourcesDir, 'browseruse-extension');
+    if (existsSync(join(bundled, 'manifest.json'))) return bundled;
+  }
+
+  // Development: packages/cli/src/browser.ts → packages/extension/dist
+  const cliSrc = dirname(new URL(import.meta.url).pathname);
+  return join(cliSrc, '..', '..', 'extension', 'dist');
+}
 
 function profileDir(name: string): string {
   return join(PROFILES_DIR, name);
@@ -152,7 +173,6 @@ const DEFAULT_FLAGS = [
   '--disable-background-networking',
   '--disable-client-side-phishing-detection',
   '--disable-default-apps',
-  '--disable-extensions-except=',
   '--disable-hang-monitor',
   '--disable-popup-blocking',
   '--disable-prompt-on-repost',
@@ -183,10 +203,22 @@ export async function launchBrowser(opts: LaunchOptions = {}): Promise<ManagedBr
 
   const chromePath = findChromePath();
 
+  // Auto-load the browseruse extension as a fallback for profiles that don't
+  // have the Chrome Web Store version installed. For 'system' profiles the user's
+  // real Chrome likely has the store extension already, so we skip --load-extension
+  // to avoid loading a duplicate.
+  const extDir = extensionDistDir();
+  const hasExt = existsSync(join(extDir, 'manifest.json'));
+  const isSystem = profile === 'system' || opts.userDataDir === systemChromeProfileDir();
+  const extFlags = (hasExt && !isSystem)
+    ? [`--load-extension=${extDir}`]
+    : [];
+
   const args = [
     `--remote-debugging-port=${port}`,
     `--user-data-dir=${userDataDir}`,
     ...DEFAULT_FLAGS,
+    ...extFlags,
   ];
 
   if (opts.headless) {

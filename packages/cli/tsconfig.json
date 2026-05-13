@@ -6,13 +6,10 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
     "noEmit": true,
-    "lib": ["ESNext", "DOM"]
+    "lib": ["ESNext", "DOM"],
+    "types": ["bun"]
   },
-  "include": [],
-  "references": [
-    { "path": "packages/protocol" },
-    { "path": "packages/cli" },
-    { "path": "packages/extension" }
-  ]
+  "include": ["src/**/*.ts"]
 }

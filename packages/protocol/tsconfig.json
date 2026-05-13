@@ -7,12 +7,8 @@
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
     "noEmit": true,
+    "composite": true,
     "lib": ["ESNext", "DOM"]
   },
-  "include": [],
-  "references": [
-    { "path": "packages/protocol" },
-    { "path": "packages/cli" },
-    { "path": "packages/extension" }
-  ]
+  "include": ["*.ts"]
 }

@@ -493,7 +493,7 @@ async function main(): Promise<void> {
 
   // Fast-path: help / version (no server needed, no dynamic imports)
   if (cmd === '--help' || cmd === '-h') { printUsage(); return; }
-  if (cmd === '--version' || cmd === '-v') { console.log('browseruse 0.3.0'); return; }
+  if (cmd === '--version' || cmd === '-v') { console.log('browseruse 0.4.0'); return; }
 
   // Command registry lookup
   const command = commandMap.get(cmd);

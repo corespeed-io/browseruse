@@ -1,0 +1,12 @@
+{
+  "name": "@browseruse/cli",
+  "version": "0.4.0",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "browseruse": "./src/cli.ts"
+  },
+  "dependencies": {
+    "@browseruse/protocol": "workspace:*"
+  }
+}
