@@ -35,12 +35,12 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
 
           # arm64 (native)
-          bun build --compile src/cli.ts --outfile browseruse
+          bun build --compile packages/cli/src/cli.ts --outfile browseruse
           tar czf "browseruse-${VERSION}-darwin-arm64.tar.gz" browseruse
           rm browseruse
 
           # x64 (cross-compile)
-          bun build --compile --target=bun-darwin-x64 src/cli.ts --outfile browseruse
+          bun build --compile --target=bun-darwin-x64 packages/cli/src/cli.ts --outfile browseruse
           tar czf "browseruse-${VERSION}-darwin-x64.tar.gz" browseruse
           rm browseruse
 
