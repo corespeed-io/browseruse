@@ -179,7 +179,7 @@ async function handleServerMethod(
       }
 
       return {
-        serverVersion: '0.3.0',
+        serverVersion: '0.4.0',
         sessionConnected: session.isConnected(),
         clientId,
       };

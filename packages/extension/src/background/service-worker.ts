@@ -68,7 +68,7 @@ async function connectWebSocket(): Promise<void> {
       jsonrpc: '2.0',
       id: 'ext-handshake',
       method: 'session.handshake',
-      params: { clientType: 'extension', version: '0.3.0' },
+      params: { clientType: 'extension', version: '0.4.0' },
     }));
     nativeConnected = true;
     // Notify popup
